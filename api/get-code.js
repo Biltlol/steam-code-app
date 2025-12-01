@@ -17,6 +17,7 @@ module.exports = async (req, res) => {
   }
 
   try {
+    console.log(req);
     const { accessKey } = req.body;
 
     // Проверяем ключ доступа
@@ -31,6 +32,7 @@ module.exports = async (req, res) => {
     const repoName = process.env.GITHUB_REPO_NAME || 'steam-code-app';
     
     const githubUrl = `https://raw.githubusercontent.com/${repoOwner}/${repoName}/main/last-code.json`;
+    console.log(githubUrl);
     
     const response = await fetch(githubUrl);
     
@@ -41,7 +43,7 @@ module.exports = async (req, res) => {
       });
       return;
     }
-
+    console.log(response.json());
     const data = await response.json();
     
     // Проверяем, не истёк ли код (5 минут)
