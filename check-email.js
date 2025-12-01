@@ -1,5 +1,7 @@
 const Imap = require('imap');
 const { simpleParser } = require('mailparser');
+const fs = require('fs');
+const path = require('path');
 
 // Конфигурация IMAP для Gmail
 const imap = new Imap({
@@ -13,31 +15,60 @@ const imap = new Imap({
 
 // Функция для извлечения кода Steam из текста
 function extractSteamCode(text, subject) {
+  console.log('=== Анализ письма ===');
+  console.log('Subject:', subject);
+  console.log('Text preview:', text.substring(0, 500));
+  
   // Проверяем, что письмо содержит информацию для нужного аккаунта
   if (!text.toLowerCase().includes('mainstreamwoodl')) {
-    console.log('Письмо не для аккаунта mainstreamwoodl, пропускаем');
+    console.log('❌ Письмо не для аккаунта mainstreamwoodl');
     return null;
   }
+  
+  console.log('✅ Письмо для аккаунта mainstreamwoodl');
 
-  // Ищем код формата: 5 символов (буквы и цифры)
+  // Ищем код - различные паттерны
   const patterns = [
-    /(?:код|code|verification code)[\s:]*([A-Z0-9]{5})/i,
-    /([A-Z0-9]{5})\s*(?:ваш|your|код|code)/i,
+    // Стандартный формат Steam Guard кода (5 символов)
+    /(?:код|code|verification code|access code)[\s:]*([A-Z0-9]{5})/i,
+    /([A-Z0-9]{5})\s*(?:ваш|your|код|code|is your)/i,
+    // Формат с дефисом
     /([A-Z0-9]{3}-[A-Z0-9]{3})/i,
-    /\b([A-Z0-9]{5})\b/g
+    /([A-Z0-9]{2}-[A-Z0-9]{3})/i,
+    // Просто 5 заглавных букв/цифр подряд
+    /\b([A-Z0-9]{5})\b/g,
+    // В HTML теге
+    /<[^>]*>([A-Z0-9]{5})<\/[^>]*>/gi,
+    // После двоеточия или тире
+    /[:—-]\s*([A-Z0-9]{5})/i
   ];
 
-  for (const pattern of patterns) {
-    const match = text.match(pattern);
-    if (match) {
-      return match[1].replace('-', '');
+  for (let i = 0; i < patterns.length; i++) {
+    const pattern = patterns[i];
+    console.log(`Пробуем паттерн ${i + 1}:`, pattern);
+    
+    const matches = text.match(pattern);
+    if (matches) {
+      console.log('Найдены совпадения:', matches);
+      
+      // Берём первое совпадение
+      let code = matches[1] || matches[0];
+      code = code.replace(/[-\s]/g, '').toUpperCase();
+      
+      // Проверяем что это похоже на код (5 символов, буквы и цифры)
+      if (code.length === 5 && /^[A-Z0-9]{5}$/.test(code)) {
+        console.log('✅ Найден код:', code);
+        return code;
+      }
     }
   }
+  
+  console.log('❌ Код не найден');
   return null;
 }
 
-// Функция сохранения кода через GitHub API
-async function saveCodeToGitHub(code) {
+// Функция сохранения кода в файл
+function saveCodeToFile(code) {
   const data = {
     code: code,
     timestamp: new Date().toISOString(),
@@ -45,57 +76,14 @@ async function saveCodeToGitHub(code) {
   };
 
   try {
-    const response = await fetch(
-      `https://api.github.com/repos/${process.env.GITHUB_REPOSITORY}/contents/last-code.json`,
-      {
-        method: 'PUT',
-        headers: {
-          'Authorization': `token ${process.env.GITHUB_TOKEN}`,
-          'Content-Type': 'application/json',
-          'Accept': 'application/vnd.github.v3+json'
-        },
-        body: JSON.stringify({
-          message: 'Update Steam code',
-          content: Buffer.from(JSON.stringify(data, null, 2)).toString('base64'),
-          sha: await getFileSha()
-        })
-      }
-    );
-
-    if (response.ok) {
-      console.log('Код сохранён в GitHub:', code);
-      return true;
-    } else {
-      console.error('Ошибка сохранения:', await response.text());
-      return false;
-    }
+    const filePath = path.join(__dirname, 'last-code.json');
+    fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
+    console.log('✅ Код сохранён в файл:', code);
+    return true;
   } catch (err) {
-    console.error('Ошибка при сохранении кода:', err);
+    console.error('❌ Ошибка при сохранении кода:', err);
     return false;
   }
-}
-
-// Получаем SHA существующего файла
-async function getFileSha() {
-  try {
-    const response = await fetch(
-      `https://api.github.com/repos/${process.env.GITHUB_REPOSITORY}/contents/last-code.json`,
-      {
-        headers: {
-          'Authorization': `token ${process.env.GITHUB_TOKEN}`,
-          'Accept': 'application/vnd.github.v3+json'
-        }
-      }
-    );
-
-    if (response.ok) {
-      const data = await response.json();
-      return data.sha;
-    }
-  } catch (err) {
-    console.log('Файл не существует, создаём новый');
-  }
-  return null;
 }
 
 // Основная функция проверки почты
@@ -108,10 +96,11 @@ function checkEmail() {
           return;
         }
 
-        const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
+        // Ищем письма за последние 30 минут
+        const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
         const searchCriteria = [
           ['FROM', 'noreply@steampowered.com'],
-          ['SINCE', tenMinutesAgo]
+          ['SINCE', thirtyMinutesAgo]
         ];
 
         imap.search(searchCriteria, (err, results) => {
@@ -121,35 +110,44 @@ function checkEmail() {
           }
 
           if (results.length === 0) {
-            console.log('Новых писем от Steam не найдено');
+            console.log('📭 Новых писем от Steam не найдено');
             imap.end();
             resolve(null);
             return;
           }
 
-          console.log(`Найдено ${results.length} писем от Steam`);
+          console.log(`📧 Найдено ${results.length} писем от Steam`);
 
-          const fetch = imap.fetch(results, { bodies: '' });
+          const fetch = imap.fetch(results, { bodies: '', markSeen: false });
           let latestCode = null;
+          let emailsProcessed = 0;
 
           fetch.on('message', (msg) => {
             msg.on('body', (stream) => {
               simpleParser(stream, async (err, parsed) => {
                 if (err) {
-                  console.error('Ошибка парсинга письма:', err);
+                  console.error('❌ Ошибка парсинга письма:', err);
                   return;
                 }
 
-                const subject = parsed.subject || '';
-                const text = parsed.text || '';
+                emailsProcessed++;
                 
-                if (subject.toLowerCase().includes('steam guard') || 
-                    text.toLowerCase().includes('код') ||
-                    text.toLowerCase().includes('code')) {
+                const subject = parsed.subject || '';
+                const textContent = parsed.text || '';
+                const htmlContent = parsed.html || '';
+                
+                // Ищем код в обоих форматах
+                const textToSearch = textContent + '\n' + htmlContent;
+                
+                console.log(`\n--- Письмо ${emailsProcessed} ---`);
+                
+                if (subject.toLowerCase().includes('steam') || 
+                    textToSearch.toLowerCase().includes('код') ||
+                    textToSearch.toLowerCase().includes('code') ||
+                    textToSearch.toLowerCase().includes('guard')) {
                   
-                  const code = extractSteamCode(text, subject);
-                  if (code) {
-                    console.log('Найден код Steam для mainstreamwoodl:', code);
+                  const code = extractSteamCode(textToSearch, subject);
+                  if (code && !latestCode) {
                     latestCode = code;
                   }
                 }
@@ -159,10 +157,15 @@ function checkEmail() {
 
           fetch.once('end', async () => {
             imap.end();
+            
+            console.log(`\n📊 Обработано писем: ${emailsProcessed}`);
+            
             if (latestCode) {
-              await saveCodeToGitHub(latestCode);
+              console.log('🎉 Найден код Steam Guard:', latestCode);
+              saveCodeToFile(latestCode);
               resolve(latestCode);
             } else {
+              console.log('😔 Код не найден ни в одном письме');
               resolve(null);
             }
           });
@@ -187,13 +190,13 @@ function checkEmail() {
 checkEmail()
   .then((code) => {
     if (code) {
-      console.log('✅ Код успешно получен и сохранён');
+      console.log('\n✅ Код успешно получен и сохранён');
     } else {
-      console.log('ℹ️ Новых кодов не найдено');
+      console.log('\nℹ️ Новых кодов не найдено');
     }
     process.exit(0);
   })
   .catch((err) => {
-    console.error('❌ Ошибка:', err);
+    console.error('\n❌ Ошибка:', err);
     process.exit(1);
   });
