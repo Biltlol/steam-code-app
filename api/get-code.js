@@ -11,9 +11,9 @@ module.exports = async (req, res) => {
   }
 
   // Принимаем только POST запросы
-  if (req.method !== 'POST' && req.method !== 'GET') {
+  if (req.method !== 'POST') {
     console.log(req);
-    res.status(402).json({ error: 'Метод не разрешён' });
+    res.status(402).json({ error: req });
     return;
   }
 
