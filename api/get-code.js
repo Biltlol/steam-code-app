@@ -1,5 +1,3 @@
-const fs = require('fs');
-
 module.exports = async (req, res) => {
   // Разрешаем CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -28,10 +26,15 @@ module.exports = async (req, res) => {
       return;
     }
 
-    // Читаем последний сохранённый код
-    const lastCodePath = './last-code.json';
+    // Читаем код из GitHub репозитория
+    const repoOwner = process.env.GITHUB_REPO_OWNER || 'Biltlol';
+    const repoName = process.env.GITHUB_REPO_NAME || 'steam-code-app';
     
-    if (!fs.existsSync(lastCodePath)) {
+    const githubUrl = `https://raw.githubusercontent.com/${repoOwner}/${repoName}/main/last-code.json`;
+    
+    const response = await fetch(githubUrl);
+    
+    if (!response.ok) {
       res.status(404).json({ 
         error: 'Код не найден. Попробуйте запросить вход в Steam.',
         code: null 
@@ -39,7 +42,7 @@ module.exports = async (req, res) => {
       return;
     }
 
-    const data = JSON.parse(fs.readFileSync(lastCodePath, 'utf8'));
+    const data = await response.json();
     
     // Проверяем, не истёк ли код (5 минут)
     const expiresAt = new Date(data.expiresAt);
