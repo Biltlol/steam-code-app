@@ -24,24 +24,33 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: '18'
+          node-version: '20'
 
       - name: Install dependencies
         run: |
-          npm install imap mailparser node-fetch
+          npm install imap mailparser
 
       - name: Check for Steam code
         env:
           GMAIL_USER: ${{ secrets.GMAIL_USER }}
           GMAIL_PASSWORD: ${{ secrets.GMAIL_PASSWORD }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           node check-email.js
 
+      - name: Check if last-code.json changed
+        id: check_changes
+        run: |
+          if git diff --quiet last-code.json; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+          fi
+
       - name: Commit and push if changed
+        if: steps.check_changes.outputs.changed == 'true'
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
           git add last-code.json
-          git diff --quiet && git diff --staged --quiet || (git commit -m "Update Steam code [skip ci]" && git push)
+          git commit -m "Update Steam code [skip ci]"
+          git push
