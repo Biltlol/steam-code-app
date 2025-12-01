@@ -66,6 +66,6 @@ module.exports = async (req, res) => {
 
   } catch (err) {
     console.error('Ошибка:', err);
-    res.status(500).json({ error: err });
+    res.status(500).json({ error: err.message });
   }
 };
