@@ -96,7 +96,9 @@
                     }
                     console.log(json);
                     const response = await fetch(API_URL, json);
-                    console.log(response)
+                    const jj = response.json();
+                    console.log(jj);
+                    console.log(jj.body);
 
                     const data = await response.json();
 
