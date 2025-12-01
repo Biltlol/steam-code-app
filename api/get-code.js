@@ -1,48 +1,49 @@
+const fs = require('fs');
+const path = require('path');
+
 module.exports = async (req, res) => {
-  // Разрешаем CORS
+  // CORS headers - разрешаем запросы с любых доменов
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  
+
   // Обработка preflight запроса
   if (req.method === 'OPTIONS') {
     res.status(200).end();
     return;
   }
-  
+
   // Принимаем только POST запросы
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Метод не разрешён' });
     return;
   }
-  
+
   try {
     const { accessKey } = req.body;
-    
+
     // Проверяем ключ доступа
     const validKey = process.env.ACCESS_KEY;
     if (!accessKey || accessKey !== validKey) {
       res.status(403).json({ error: 'Неверный ключ доступа' });
       return;
     }
+
+    // Читаем последний сохранённый код
+    const lastCodePath = path.join('/tmp', 'last-code.json');
     
-    // Читаем код из GitHub репозитория
-    const repoOwner = process.env.GITHUB_REPO_OWNER || 'Biltlol';
-    const repoName = process.env.GITHUB_REPO_NAME || 'steam-code-app';
-    
-    const githubUrl = `https://raw.githubusercontent.com/${repoOwner}/${repoName}/main/last-code.json`;
-    
-    const response = await fetch(githubUrl);
-    
-    if (!response.ok) {
+    // Проверяем существует ли файл
+    let data;
+    try {
+      const fileContent = fs.readFileSync(lastCodePath, 'utf8');
+      data = JSON.parse(fileContent);
+    } catch (err) {
       res.status(404).json({ 
-        error: 'Код не найден. Попробуйте запросить вход в Steam.',
+        error: 'Код не найден. Попробуйте запросить вход в Steam и подождите 5 минут.',
         code: null 
       });
       return;
     }
-    
-    const data = await response.json();
     
     // Проверяем, не истёк ли код (5 минут)
     const expiresAt = new Date(data.expiresAt);
@@ -53,14 +54,14 @@ module.exports = async (req, res) => {
       });
       return;
     }
-    
+
     // Возвращаем код
     res.status(200).json({
       code: data.code,
       timestamp: data.timestamp,
       expiresAt: data.expiresAt
     });
-    
+
   } catch (err) {
     console.error('Ошибка:', err);
     res.status(500).json({ error: 'Внутренняя ошибка сервера: ' + err.message });
