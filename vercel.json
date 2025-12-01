@@ -11,8 +11,5 @@
       "src": "/api/get-code",
       "dest": "/api/get-code.js"
     }
-  ],
-  "env": {
-    "ACCESS_KEY": "@access_key"
-  }
+  ]
 }
