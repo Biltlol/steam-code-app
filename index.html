@@ -84,7 +84,7 @@
 
                     localStorage.setItem('steamAccessKey', accessKey);
 
-                    const response = await fetch(API_URL, {
+                    const json = {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
@@ -93,7 +93,10 @@
                             accessKey: accessKey,
                             timestamp: Date.now()
                         })
-                    });
+                    }
+                    console.log(json);
+                    const response = await fetch(API_URL, json);
+                    console.log(response)
 
                     const data = await response.json();
 
