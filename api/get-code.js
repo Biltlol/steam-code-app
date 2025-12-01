@@ -43,8 +43,7 @@ module.exports = async (req, res) => {
         code: null 
       });
       return;
-    }
-    console.log(response.json());
+    )
     const data = await response.json();
     
     // Проверяем, не истёк ли код (5 минут)
