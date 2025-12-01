@@ -1,0 +1,18 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "api/get-code.js",
+      "use": "@vercel/node"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/get-code",
+      "dest": "/api/get-code.js"
+    }
+  ],
+  "env": {
+    "ACCESS_KEY": "@access_key"
+  }
+}
