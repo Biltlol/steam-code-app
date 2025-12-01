@@ -2,7 +2,7 @@ name: Check Steam Email
 
 on:
   schedule:
-    - cron: '*/1 * * * *'
+    - cron: '*/5 * * * *'
   workflow_dispatch:
   repository_dispatch:
     types: [check-email]
