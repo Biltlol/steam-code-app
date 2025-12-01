@@ -1,6 +1,5 @@
 const Imap = require('imap');
 const { simpleParser } = require('mailparser');
-const fs = require('fs');
 
 // Конфигурация IMAP для Gmail
 const imap = new Imap({
@@ -13,7 +12,13 @@ const imap = new Imap({
 });
 
 // Функция для извлечения кода Steam из текста
-function extractSteamCode(text) {
+function extractSteamCode(text, subject) {
+  // Проверяем, что письмо содержит информацию для нужного аккаунта
+  if (!text.toLowerCase().includes('mainstreamwoodl')) {
+    console.log('Письмо не для аккаунта mainstreamwoodl, пропускаем');
+    return null;
+  }
+
   // Ищем код формата: 5 символов (буквы и цифры)
   const patterns = [
     /(?:код|code|verification code)[\s:]*([A-Z0-9]{5})/i,
@@ -31,28 +36,66 @@ function extractSteamCode(text) {
   return null;
 }
 
-// Функция чтения последнего сохранённого кода
-function getLastCode() {
-  try {
-    if (fs.existsSync('last-code.json')) {
-      const data = JSON.parse(fs.readFileSync('last-code.json', 'utf8'));
-      return data;
-    }
-  } catch (err) {
-    console.log('Нет сохранённого кода');
-  }
-  return null;
-}
-
-// Функция сохранения нового кода
-function saveCode(code) {
+// Функция сохранения кода через GitHub API
+async function saveCodeToGitHub(code) {
   const data = {
     code: code,
     timestamp: new Date().toISOString(),
     expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString()
   };
-  fs.writeFileSync('last-code.json', JSON.stringify(data, null, 2));
-  console.log('Код сохранён:', code);
+
+  try {
+    const response = await fetch(
+      `https://api.github.com/repos/${process.env.GITHUB_REPOSITORY}/contents/last-code.json`,
+      {
+        method: 'PUT',
+        headers: {
+          'Authorization': `token ${process.env.GITHUB_TOKEN}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/vnd.github.v3+json'
+        },
+        body: JSON.stringify({
+          message: 'Update Steam code',
+          content: Buffer.from(JSON.stringify(data, null, 2)).toString('base64'),
+          sha: await getFileSha()
+        })
+      }
+    );
+
+    if (response.ok) {
+      console.log('Код сохранён в GitHub:', code);
+      return true;
+    } else {
+      console.error('Ошибка сохранения:', await response.text());
+      return false;
+    }
+  } catch (err) {
+    console.error('Ошибка при сохранении кода:', err);
+    return false;
+  }
+}
+
+// Получаем SHA существующего файла
+async function getFileSha() {
+  try {
+    const response = await fetch(
+      `https://api.github.com/repos/${process.env.GITHUB_REPOSITORY}/contents/last-code.json`,
+      {
+        headers: {
+          'Authorization': `token ${process.env.GITHUB_TOKEN}`,
+          'Accept': 'application/vnd.github.v3+json'
+        }
+      }
+    );
+
+    if (response.ok) {
+      const data = await response.json();
+      return data.sha;
+    }
+  } catch (err) {
+    console.log('Файл не существует, создаём новый');
+  }
+  return null;
 }
 
 // Основная функция проверки почты
@@ -104,9 +147,9 @@ function checkEmail() {
                     text.toLowerCase().includes('код') ||
                     text.toLowerCase().includes('code')) {
                   
-                  const code = extractSteamCode(text);
+                  const code = extractSteamCode(text, subject);
                   if (code) {
-                    console.log('Найден код Steam:', code);
+                    console.log('Найден код Steam для mainstreamwoodl:', code);
                     latestCode = code;
                   }
                 }
@@ -114,10 +157,10 @@ function checkEmail() {
             });
           });
 
-          fetch.once('end', () => {
+          fetch.once('end', async () => {
             imap.end();
             if (latestCode) {
-              saveCode(latestCode);
+              await saveCodeToGitHub(latestCode);
               resolve(latestCode);
             } else {
               resolve(null);
