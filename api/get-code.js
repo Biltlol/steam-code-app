@@ -12,13 +12,11 @@ module.exports = async (req, res) => {
 
   // Принимаем только POST запросы
   if (req.method !== 'POST') {
-    console.log(req);
     res.status(402).json({ statusText: req });
     return;
   }
 
   try {
-    console.log(req);
     const { accessKey } = req.body;
 
     // Проверяем ключ доступа
@@ -33,8 +31,6 @@ module.exports = async (req, res) => {
     const repoName = process.env.GITHUB_REPO_NAME || 'steam-code-app';
     
     const githubUrl = `https://raw.githubusercontent.com/${repoOwner}/${repoName}/main/last-code.json`;
-    console.log(githubUrl);
-    
     const response = await fetch(githubUrl);
     
     if (!response.ok) {
@@ -65,7 +61,6 @@ module.exports = async (req, res) => {
 
   } catch (err) {
     console.error('Ошибка:', err);
-    const fff = req.body;
-    res.status(500).json({ error: err.message, req: fff });
+    res.status(500).json({ error: err.message });
   }
 };
