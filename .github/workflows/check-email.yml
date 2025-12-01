@@ -1,0 +1,44 @@
+name: Check Steam Email
+
+on:
+  # Запуск по расписанию каждые 5 минут
+  schedule:
+    - cron: '*/5 * * * *'
+  # Запуск вручную
+  workflow_dispatch:
+  # Запуск через API
+  repository_dispatch:
+    types: [check-email]
+
+jobs:
+  check-email:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        run: |
+          npm install imap mailparser
+
+      - name: Check for Steam code
+        env:
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_PASSWORD: ${{ secrets.GMAIL_PASSWORD }}
+        run: |
+          node check-email.js
+
+      - name: Commit and push if changed
+        run: |
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
+          git add -A
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Update Steam code" && git push)
