@@ -1,27 +1,25 @@
 name: Check Steam Email
 
 on:
-  # Запуск по расписанию каждые 5 минут
   schedule:
     - cron: '*/5 * * * *'
-  # Запуск вручную
   workflow_dispatch:
-  # Запуск через API
   repository_dispatch:
     types: [check-email]
+
+permissions:
+  contents: write
 
 jobs:
   check-email:
     runs-on: ubuntu-latest
-    
-    permissions:
-      contents: write  # Важно для записи в репозиторий
     
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          persist-credentials: true
 
       - name: Setup Node.js
         uses: actions/setup-node@v3
@@ -40,3 +38,10 @@ jobs:
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           node check-email.js
+
+      - name: Commit and push if changed
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add last-code.json
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Update Steam code [skip ci]" && git push)
