@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Steam Guard Code Getter</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fadeIn {
+            animation: fadeIn 0.3s ease-out;
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 min-h-screen">
+    <div id="root"></div>
+
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // ВАЖНО: Замените этот URL на ваш Vercel URL после деплоя!
+        const API_URL = 'https://ВАШ-ПРОЕКТ.vercel.app/api/get-code';
+
+        function SteamCodeGetter() {
+            const [accessKey, setAccessKey] = useState('');
+            const [code, setCode] = useState('');
+            const [loading, setLoading] = useState(false);
+            const [error, setError] = useState('');
+            const [copied, setCopied] = useState(false);
+            const [lastRequest, setLastRequest] = useState(null);
+            const [expiresAt, setExpiresAt] = useState(null);
+            const [timeLeft, setTimeLeft] = useState(null);
+
+            // Загрузка сохранённого ключа
+            useEffect(() => {
+                const savedKey = localStorage.getItem('steamAccessKey');
+                if (savedKey) {
+                    setAccessKey(savedKey);
+                }
+            }, []);
+
+            // Таймер обратного отсчёта
+            useEffect(() => {
+                if (!expiresAt) return;
+
+                const interval = setInterval(() => {
+                    const now = new Date();
+                    const expires = new Date(expiresAt);
+                    const diff = expires - now;
+
+                    if (diff <= 0) {
+                        setTimeLeft('Истёк');
+                        setCode('');
+                        clearInterval(interval);
+                    } else {
+                        const minutes = Math.floor(diff / 60000);
+                        const seconds = Math.floor((diff % 60000) / 1000);
+                        setTimeLeft(`${minutes}:${seconds.toString().padStart(2, '0')}`);
+                    }
+                }, 1000);
+
+                return () => clearInterval(interval);
+            }, [expiresAt]);
+
+            const getCode = async () => {
+                setLoading(true);
+                setError('');
+                setCode('');
+                setCopied(false);
+                setExpiresAt(null);
+                setTimeLeft(null);
+
+                try {
+                    if (!accessKey || accessKey.length < 8) {
+                        throw new Error('Введите корректный ключ доступа (минимум 8 символов)');
+                    }
+
+                    localStorage.setItem('steamAccessKey', accessKey);
+
+                    const response = await fetch(API_URL, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            accessKey: accessKey,
+                            timestamp: Date.now()
+                        })
+                    });
+
+                    const data = await response.json();
+
+                    if (!response.ok) {
+                        throw new Error(data.error || 'Ошибка при получении кода');
+                    }
+
+                    if (data.code) {
+                        setCode(data.code);
+                        setExpiresAt(data.expiresAt);
+                        setLastRequest(new Date(data.timestamp).toLocaleTimeString('ru-RU'));
+                    } else {
+                        throw new Error('Новых кодов не найдено. Попробуйте запросить вход в Steam снова.');
+                    }
+
+                } catch (err) {
+                    setError(err.message);
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            const copyCode = () => {
+                navigator.clipboard.writeText(code);
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2000);
+            };
+
+            const clearKey = () => {
+                setAccessKey('');
+                localStorage.removeItem('steamAccessKey');
+            };
+
+            return (
+                <div className="min-h-screen flex items-center justify-center p-4">
+                    <div className="w-full max-w-md">
+                        {/* Заголовок */}
+                        <div className="text-center mb-8">
+                            <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-500 rounded-full mb-4 shadow-lg">
+                                <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                </svg>
+                            </div>
+                            <h1 className="text-3xl font-bold text-white mb-2">Steam Guard Code</h1>
+                            <p className="text-blue-200">Получение кода для входа в Steam</p>
+                        </div>
+
+                        {/* Основная карточка */}
+                        <div className="bg-white/10 backdrop-blur-lg rounded-2xl shadow-2xl p-6 border border-white/20">
+                            
+                            {/* Поле ввода ключа */}
+                            <div className="mb-6">
+                                <label className="block text-sm font-medium text-blue-100 mb-2">
+                                    Ключ доступа
+                                </label>
+                                <div className="relative">
+                                    <svg className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-blue-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                                    </svg>
+                                    <input
+                                        type="password"
+                                        value={accessKey}
+                                        onChange={(e) => setAccessKey(e.target.value)}
+                                        placeholder="Введите ваш ключ доступа"
+                                        className="w-full pl-10 pr-10 py-3 bg-white/5 border border-white/20 rounded-lg text-white placeholder-blue-300/50 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                                        onKeyPress={(e) => e.key === 'Enter' && getCode()}
+                                    />
+                                    {accessKey && (
+                                        <button
+                                            onClick={clearKey}
+                                            className="absolute right-3 top-1/2 transform -translate-y-1/2 text-blue-300 hover:text-white transition-colors"
+                                        >
+                                            ✕
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Кнопка */}
+                            <button
+                                onClick={getCode}
+                                disabled={loading || !accessKey}
+                                className="w-full bg-blue-500 hover:bg-blue-600 disabled:bg-blue-500/50 disabled:cursor-not-allowed text-white font-semibold py-3 px-6 rounded-lg transition-all duration-200 flex items-center justify-center gap-2 mb-4 shadow-lg"
+                            >
+                                {loading ? (
+                                    <>
+                                        <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                        </svg>
+                                        Получение кода...
+                                    </>
+                                ) : (
+                                    <>
+                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                        </svg>
+                                        Получить код
+                                    </>
+                                )}
+                            </button>
+
+                            {/* Ошибка */}
+                            {error && (
+                                <div className="mb-4 p-4 bg-red-500/20 border border-red-500/50 rounded-lg flex items-start gap-3 animate-fadeIn">
+                                    <svg className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    <p className="text-red-200 text-sm">{error}</p>
+                                </div>
+                            )}
+
+                            {/* Код */}
+                            {code && (
+                                <div className="mb-4 p-6 bg-green-500/20 border border-green-500/50 rounded-lg animate-fadeIn">
+                                    <div className="flex items-center justify-between mb-3">
+                                        <span className="text-green-200 text-sm font-medium">Ваш код Steam Guard:</span>
+                                        <div className="flex items-center gap-2">
+                                            {timeLeft && (
+                                                <div className="flex items-center gap-1 text-green-300 text-xs">
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                    </svg>
+                                                    <span>{timeLeft}</span>
+                                                </div>
+                                            )}
+                                            <svg className="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                            </svg>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <div className="flex-1 bg-black/30 rounded-lg p-4">
+                                            <p className="text-3xl font-mono font-bold text-white text-center tracking-wider">
+                                                {code}
+                                            </p>
+                                        </div>
+                                        <button
+                                            onClick={copyCode}
+                                            className="p-3 bg-green-500 hover:bg-green-600 rounded-lg transition-colors shadow-lg"
+                                            title="Копировать"
+                                        >
+                                            {copied ? (
+                                                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                                </svg>
+                                            ) : (
+                                                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                                </svg>
+                                            )}
+                                        </button>
+                                    </div>
+                                    {lastRequest && (
+                                        <p className="text-green-200/70 text-xs mt-3 text-center">
+                                            Получено: {lastRequest}
+                                        </p>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Инструкция */}
+                            <div className="mt-6 p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+                                <p className="text-blue-100 text-sm leading-relaxed">
+                                    <strong className="block mb-2">📝 Инструкция:</strong>
+                                    1. Введите ключ доступа<br/>
+                                    2. Нажмите "Получить код"<br/>
+                                    3. Дождитесь письма от Steam<br/>
+                                    4. Код появится автоматически<br/>
+                                    5. Используйте для входа в Steam
+                                </p>
+                            </div>
+                        </div>
+
+                        {/* Футер */}
+                        <div className="text-center mt-6 space-y-2">
+                            <p className="text-blue-200/60 text-sm">⏱️ Код действителен 5 минут</p>
+                            <p className="text-blue-200/60 text-xs">🔒 Не делитесь ключом с третьими лицами</p>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        ReactDOM.render(<SteamCodeGetter />, document.getElementById('root'));
+    </script>
+</body>
+</html>
